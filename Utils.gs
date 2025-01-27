@@ -472,15 +472,24 @@ function test_check_report()
 [生命服務日常實踐分享]
 `
 
-  const required_subjects = [
+  const required_subjects_1 = [
     "修煉主題",
     "觀呼吸實作心得體悟",
     "天人師的德範威儀應心語句",
     "生命服務日常實踐分享",
   ];
 
+  const required_subjects_2 = [
+    "修煉主題",
+    "觀呼吸實作心得體悟",
+    "天人師的德範威儀應心語句",
+    "叩問",
+  ];
+
   let missing_subjects = [];
-  for (const subject of required_subjects) {
+  let subjects = phrase.includes("2.0版") ? required_subjects_2 : required_subjects_1;
+  
+  for (const subject of subjects) {
     if (!checkSubject(phrase, subject)) {
       missing_subjects.push(`【${subject}】`);
     }
