@@ -138,7 +138,7 @@ function init()
     {
       log(e);
 
-      if(!TEST_GROUP.includes(event.source.groupId)) {
+      if(!GROUP_TEST.includes(event.source.groupId)) {
         return [];
       }
 
