@@ -92,43 +92,41 @@ function init()
         event.user.displayName,
       ], report.sheetName);
 
-      // 提醒缺少的項目
-      let required_subjects = [];
-      let missing_subjects = [];
+      // 暫時停用必填項目檢查
+      // let required_subjects = [];
+      // let missing_subjects = [];
 
-      if (report.title == "修煉航海週記1.0版") {
-        required_subjects = [
-          "修煉主題",
-          "觀呼吸實作心得體悟",
-          "天人師的德範威儀應心語句",
-          "生命服務日常實踐分享",
-        ];
-      } else if (report.title == "修煉航海週記2.0版") {
-        required_subjects = [
-          "修煉主題",
-          "觀呼吸實作心得體悟",
-          "天人師的德範威儀應心語句",
-          "叩問",
-        ];
-      }
-      
-      // 只有在 1.0 和 2.0 版本時才執行檢查
-      if (required_subjects.length > 0) {
-        for (const subject of required_subjects) {
-          if (!checkSubject(event.word, subject)) {
-            missing_subjects.push(`【${subject}】`);
-          }
-        }
+      // if (report.title == "修煉航海週記1.0版") {
+      //   required_subjects = [
+      //     "修煉主題",
+      //     "觀呼吸實作心得體悟",
+      //     "天人師的德範威儀應心語句",
+      //     "生命服務日常實踐分享",
+      //   ];
+      // } else if (report.title == "修煉航海週記2.0版") {
+      //   required_subjects = [
+      //     "修煉主題",
+      //     "觀呼吸實作心得體悟",
+      //     "天人師的德範威儀應心語句",
+      //     "叩問",
+      //   ];
+      // }
 
-        if (missing_subjects.length > 0) {
-          // updateNGTime(event.user.userId);
-          return [
-            LineApp.LineText(event.user.displayName +
-              "夥伴您好，您的修煉航海週記少了以下項目：\n" +
-              missing_subjects.join("\n")),
-          ];
-        }
-      }
+      // if (required_subjects.length > 0) {
+      //   for (const subject of required_subjects) {
+      //     if (!checkSubject(event.word, subject)) {
+      //       missing_subjects.push(`【${subject}】`);
+      //     }
+      //   }
+
+      //   if (missing_subjects.length > 0) {
+      //     return [
+      //       LineApp.LineText(event.user.displayName +
+      //         "夥伴您好，您的修煉航海週記少了以下項目：\n" +
+      //         missing_subjects.join("\n")),
+      //     ];
+      //   }
+      // }
 
       if(lastNG) {
         return LineApp.LineStickerFormatOK();
