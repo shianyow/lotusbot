@@ -51,14 +51,15 @@ function init()
     
     try
     {
-      // 確認標題格式
-      let rule = "^(【.*" + report.title + ".*】" + "|" + "［.*" + report.title + ".*］)";
-      let re = new RegExp(`${rule}`);
-      if (!event.word.match(re)) {
+      // 確認標題格式：第一行需包含關鍵字
+      let firstLine = event.word.split('\n')[0];
+      let keywords = ["修煉航海週記", "本月修煉總結"];
+      let hasKeyword = keywords.some(keyword => firstLine.includes(keyword));
+      if (!hasKeyword) {
         updateNGTime(event.user.userId);
         return [
           LineApp.LineText(event.user.displayName + "夥伴您好，" +
-            "請使用以下標題格式，前面請勿空白、空行：\n" + "【" + report.title + "】"),
+            "請在第一行包含「修煉航海週記」或「本月修煉總結」"),
           LineApp.LineStickerFormatNG(),
         ];
       }
@@ -147,20 +148,26 @@ function init()
     }
   }
 
-  const reports = [
-    { title: "修煉航海週記1.0版", sheetName: "Report_Bot" },
-    { title: "修煉航海週記2.0版", sheetName: "Report_Bot" },
-    { title: "本月修煉總結", sheetName: "Report_Bot_總結" },
-  ];
-
-  for (const report of reports) {
-    lineApp.addRule_quote(
-      report.title,
-      (event) => {
-        return collectReport(event, report);
+  // 修煉航海週記（統一處理1.0和2.0版）
+  lineApp.addRule_quote(
+    "修煉航海週記",
+    (event) => {
+      // 預設使用2.0版，若內容包含1.0則使用1.0版
+      let report = { title: "修煉航海週記2.0版", sheetName: "Report_Bot" };
+      if (event.word.includes("1.0")) {
+        report = { title: "修煉航海週記1.0版", sheetName: "Report_Bot" };
       }
-    );
-  }
+      return collectReport(event, report);
+    }
+  );
+
+  // 本月修煉總結
+  lineApp.addRule_quote(
+    "本月修煉總結",
+    (event) => {
+      return collectReport(event, { title: "本月修煉總結", sheetName: "Report_Bot_總結" });
+    }
+  );
 
 
   //"join",當機器人被加入群組時

@@ -122,8 +122,7 @@ class LineApp {
   addRule_quote(name,reply,check){
     if(check == null)
     {
-      // let rule = "^\n?.*(【.*" + name + ".*】" + "|" + "［.*" + name + ".*］)";
-      let rule = "^\n?.*(" + name + ".*" + "|" + name + ".*)";
+      let rule = "^\n?.*" + name;
       let re = new RegExp(`${rule}`);
       check = (event)=>event.word.match(re);
     }
