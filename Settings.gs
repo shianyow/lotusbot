@@ -13,3 +13,6 @@ var LINELOGIN = {
 var LIFFURL = PropertiesService.getScriptProperties().getProperty('LIFFURL') || '';
 
 var GROUP_TEST = (PropertiesService.getScriptProperties().getProperty('GROUP_TEST') || '').split(',').filter(x => x);
+
+var GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
+var OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY') || '';

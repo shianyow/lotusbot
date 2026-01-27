@@ -75,6 +75,8 @@ function init()
         ];
       }
 
+      let reportUserName = name_array[2].trim() || event.user.displayName;
+
       let lastNG = false;
       if(event.user.lastNGTime) {
         lastNG = checkHasRecentNG(event.user.userId);
@@ -91,6 +93,21 @@ function init()
         event.word,
         event.user.displayName,
       ], report.sheetName);
+
+      // 檢查是否有叩問內容並提供 AI 回饋
+      let deepQuestion = extractDeepQuestion(event.word);
+      if (!deepQuestion.isEmpty) {
+        try {
+          let aiFeedback = generateAIFeedback(event.word, deepQuestion.content);
+
+          // 只回傳 AI 回饋文字（不貼圖、不加固定開場）
+          return [LineApp.LineText(`${reportUserName}夥伴您好，\n\n${aiFeedback}`)];
+        } catch (e) {
+          log('AI 回饋錯誤: ' + e.message);
+          // AI 回饋失敗時：不在群組回覆，避免噪音；僅後台記錄即可
+          return [];
+        }
+      }
 
       // 暫時停用必填項目檢查
       // let required_subjects = [];

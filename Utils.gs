@@ -12,6 +12,31 @@ function findtext(text,st,en)
     return text.slice(a + st.length, b).trim();
 }
 
+function extractDeepQuestion(text) {
+  let match = String(text || '').match(/(?:【\s*叩問\s*】|［\s*叩問\s*］)\s*([\s\S]*?)(?=\n[【［]|$)/);
+  if (!match) {
+    return { raw: '', content: '', isEmpty: true };
+  }
+
+  let raw = match[1] == null ? '' : String(match[1]);
+  let content = raw.trim();
+
+  // 若第一行是括號備註（例如「(與修煉相關即可)」），忽略該行
+  if (content) {
+    let lines = content.split('\n').map(x => x.trim()).filter(x => x);
+    if (lines.length > 0 && /^\([^\)]*\)$/.test(lines[0])) {
+      lines.shift();
+    }
+    content = lines.join('\n').trim();
+  }
+
+  // 空叩問判斷：僅「無」或「暫無」（允許結尾空白/標點）才視為空
+  let trimmedStart = content.replace(/^[\s\u3000]+/, '');
+  let isEmpty = !content || /^(無|暫無)[\s\u3000\.,!?:;，。！？：；、]*$/.test(trimmedStart);
+
+  return { raw: raw, content: content, isEmpty: isEmpty };
+}
+
 function writeReportBotFromLog()
 {
   sheetLog = "Log";
@@ -573,4 +598,170 @@ function test_parse_name()
 function log(e)
 {
   Log.appendData({Time:new Date(),Message:JSON.stringify(e)});
+}
+
+function callGeminiAPI(prompt) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY 未設定');
+  }
+
+  const payload = {
+    contents: [{
+      role: "user",
+      parts: [{
+        text: prompt
+      }]
+    }]
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const models = [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ];
+
+  let lastErr = null;
+  let attemptedModels = [];
+
+  for (const model of models) {
+    const url = 'https://generativelanguage.googleapis.com/v1/models/' + model + ':generateContent?key=' + GEMINI_API_KEY;
+    attemptedModels.push(model);
+    try {
+      const response = UrlFetchApp.fetch(url, options);
+      const responseText = response.getContentText();
+      const result = JSON.parse(responseText);
+
+      if (result.error) {
+        const code = result.error.code;
+        const status = result.error.status;
+        const message = result.error.message || '未知錯誤';
+        const err = new Error('Gemini API 錯誤: ' + message);
+
+        const isRateLimit = code === 429 || status === 'RESOURCE_EXHAUSTED' || /exceeded/i.test(message);
+        if (isRateLimit) {
+          lastErr = err;
+          continue;
+        }
+        throw err;
+      }
+
+      if (result.candidates && result.candidates[0] && result.candidates[0].content) {
+        log('Gemini model used: ' + JSON.stringify({model:model, attemptedModels:attemptedModels}));
+        return result.candidates[0].content.parts[0].text;
+      }
+
+      throw new Error('Gemini API 回應格式錯誤');
+    } catch (e) {
+      const msg = String(e && e.message ? e.message : e);
+      const isRateLimit = /429|RESOURCE_EXHAUSTED|exceeded/i.test(msg);
+      if (isRateLimit) {
+        lastErr = e;
+        continue;
+      }
+      if (msg.includes('Gemini API')) {
+        throw e;
+      }
+      throw new Error('Gemini API 呼叫失敗: ' + msg);
+    }
+  }
+
+  log('Gemini model failed: ' + JSON.stringify({attemptedModels:attemptedModels, error:lastErr ? String(lastErr.message || lastErr) : 'exceeded quota'}));
+  throw lastErr || new Error('Gemini API 錯誤: exceeded quota');
+}
+
+function callOpenAIAPI(prompt) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY 未設定');
+  }
+
+  const url = 'https://api.openai.com/v1/chat/completions';
+  
+  const payload = {
+    model: 'gpt-4o-mini',
+    messages: [{
+      role: 'user',
+      content: prompt
+    }],
+    temperature: 0.7,
+    max_tokens: 1000
+  };
+  
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'Authorization': 'Bearer ' + OPENAI_API_KEY
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const responseText = response.getContentText();
+    const result = JSON.parse(responseText);
+    
+    // 記錄完整回應以便診斷
+    if (result.error) {
+      log('OpenAI API 錯誤回應: ' + JSON.stringify(result.error));
+      throw new Error('OpenAI API 錯誤: ' + (result.error.message || '未知錯誤'));
+    }
+    
+    if (result.choices && result.choices[0] && result.choices[0].message) {
+      return result.choices[0].message.content;
+    } else {
+      log('OpenAI API 回應格式異常: ' + responseText);
+      throw new Error('OpenAI API 回應格式錯誤');
+    }
+  } catch (e) {
+    if (e.message.includes('OpenAI API')) {
+      throw e;
+    }
+    log('OpenAI API 呼叫失敗: ' + e.message);
+    throw new Error('OpenAI API 呼叫失敗: ' + e.message);
+  }
+}
+
+function generateAIFeedback(report, question) {
+  const prompt = `請以溫暖、務實、尊重的口吻，針對以下修煉心得中的叩問提供回饋。
+
+修煉心得全文：
+${report}
+
+叩問內容：
+${question}
+
+請提供：
+1. 針對叩問的具體回應
+2. 結合心得內容的觀察與建議
+3. 溫暖的鼓勵與支持
+
+格式要求：
+- 回覆內容不要包含任何問候或稱呼（例如「你好」、「夥伴您好」、或直接叫出姓名）
+- 稱呼對方時，使用「您」
+- 不要寒暄或開場白，第一句直接進入回饋重點
+- 不要重述題目或原文
+- 不要使用任何 Markdown 符號
+- 300 字以內`;
+
+  try {
+    if (GEMINI_API_KEY) {
+      return callGeminiAPI(prompt);
+    } 
+    // OpenAI 暫時停用，等充值後再啟用
+    // else if (OPENAI_API_KEY) {
+    //   return callOpenAIAPI(prompt);
+    // } 
+    else {
+      throw new Error('AI API Key 未設定');
+    }
+  } catch (e) {
+    throw e;
+  }
 }
