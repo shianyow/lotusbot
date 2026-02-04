@@ -16,3 +16,6 @@ var GROUP_TEST = (PropertiesService.getScriptProperties().getProperty('GROUP_TES
 
 var GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
 var OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY') || '';
+
+// 觀照覺明修煉營知識庫 Google Docs ID
+var KNOWLEDGE_DOC_ID = PropertiesService.getScriptProperties().getProperty('KNOWLEDGE_DOC_ID') || '';

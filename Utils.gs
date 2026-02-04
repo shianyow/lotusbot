@@ -728,14 +728,103 @@ function callOpenAIAPI(prompt) {
   }
 }
 
+function getKnowledgeBase() {
+  if (!KNOWLEDGE_DOC_ID) {
+    return null;
+  }
+
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('knowledge_base');
+
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const doc = DocumentApp.openById(KNOWLEDGE_DOC_ID);
+    const content = doc.getBody().getText();
+
+    // 快取 6 小時（21600 秒）
+    cache.put('knowledge_base', content, 21600);
+
+    return content;
+  } catch (e) {
+    console.error('讀取知識庫失敗:', e);
+    return null;
+  }
+}
+
+function isGuanZhaoReport(report) {
+  return report.includes('【觀照覺明修煉營】');
+}
+
 function generateAIFeedback(report, question) {
-  const prompt = `請以溫暖、務實、尊重的口吻，針對以下修煉心得中的叩問提供回饋。
+  let prompt;
 
-修煉心得全文：
+  if (isGuanZhaoReport(report)) {
+    const knowledge = getKnowledgeBase();
+
+    if (knowledge) {
+      prompt = `你是「觀照覺明修煉營」的指導老師。這是進階修煉課程，學員已具備基礎，請根據課程教學內容，針對學員的叩問提供精準回饋。
+
+<課程教學內容>
+${knowledge}
+</課程教學內容>
+
+<學員修煉心得>
 ${report}
+</學員修煉心得>
 
-叩問內容：
+<學員叩問>
 ${question}
+</學員叩問>
+
+回饋原則：
+1. 精準回應：直指叩問核心，不繞圈子，不說空話
+2. 依據教學：回應須扣緊課程內容，引導學員回到正確的修煉方向
+3. 點出盲點：若從心得中觀察到學員的盲點或偏差，直接指出
+
+格式要求：
+- 不要包含任何問候或稱呼（例如「你好」、「夥伴您好」、或直接叫出姓名）
+- 稱呼對方時，使用「您」
+- 不要寒暄或開場白，第一句直接進入回饋重點
+- 不要重述題目或原文
+- 不要使用任何 Markdown 符號
+- 300 字以內`;
+    } else {
+      console.warn('知識庫未設定或讀取失敗，使用預設回覆方式');
+      prompt = getDefaultPrompt(report, question);
+    }
+  } else {
+    prompt = getDefaultPrompt(report, question);
+  }
+
+  try {
+    if (GEMINI_API_KEY) {
+      return callGeminiAPI(prompt);
+    }
+    // OpenAI 暫時停用，等充值後再啟用
+    // else if (OPENAI_API_KEY) {
+    //   return callOpenAIAPI(prompt);
+    // }
+    else {
+      throw new Error('AI API Key 未設定');
+    }
+  } catch (e) {
+    throw e;
+  }
+}
+
+function getDefaultPrompt(report, question) {
+  return `請以溫暖、務實、尊重的口吻，針對以下修煉心得中的叩問提供回饋。
+
+<修煉心得全文>
+${report}
+</修煉心得全文>
+
+<叩問內容>
+${question}
+</叩問內容>
 
 請提供：
 1. 針對叩問的具體回應
@@ -749,19 +838,4 @@ ${question}
 - 不要重述題目或原文
 - 不要使用任何 Markdown 符號
 - 300 字以內`;
-
-  try {
-    if (GEMINI_API_KEY) {
-      return callGeminiAPI(prompt);
-    } 
-    // OpenAI 暫時停用，等充值後再啟用
-    // else if (OPENAI_API_KEY) {
-    //   return callOpenAIAPI(prompt);
-    // } 
-    else {
-      throw new Error('AI API Key 未設定');
-    }
-  } catch (e) {
-    throw e;
-  }
 }
