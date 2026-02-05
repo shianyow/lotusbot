@@ -758,14 +758,187 @@ function isGuanZhaoReport(report) {
   return report.includes('【觀照覺明修煉營】');
 }
 
-function generateAIFeedback(report, question) {
-  let prompt;
+/**
+ * 判斷是否為 108 項修煉心得（修煉航海週記）
+ */
+function is108PracticeReport(report) {
+  return report.includes('【修煉航海週記');
+}
 
+/**
+ * 從心得中提取修煉主題編號和名稱
+ * 格式：【修煉主題】\n  105修出界定與破界定
+ * @param {string} text - 心得全文
+ * @returns {Object} { number: '105', name: '修出界定與破界定', found: true } 或 { found: false }
+ */
+function extractPracticeTheme(text) {
+  // 匹配【修煉主題】後的內容（可能同行或下一行）
+  const match = text.match(/【修煉主題】[：:\s]*([\s\S]*?)(?=\n\s*●|\n\s*【|$)/);
+  if (!match) {
+    return { found: false };
+  }
+
+  // 取得主題文字，去除前後空白和換行
+  const themeText = match[1].trim().split('\n')[0].trim();
+
+  if (!themeText) {
+    return { found: false };
+  }
+
+  // 嘗試提取編號（1-3 位數字）和名稱
+  // 格式：105修出界定與破界定、105 修出界定與破界定
+  const numberMatch = themeText.match(/^(\d{1,3})\s*[修]?(.*)$/);
+
+  if (numberMatch) {
+    const number = numberMatch[1].padStart(3, '0');  // 補零成 3 位數
+    let name = numberMatch[2].trim();
+    return { number: number, name: name, found: true };
+  }
+
+  // 沒有編號，只有名稱（可能是「修火侯」這種格式）
+  return { number: null, name: themeText, found: true };
+}
+
+/**
+ * 從 108 修煉 Sheets 中查詢對應的修煉內容
+ * @param {Object} theme - extractPracticeTheme 的回傳值
+ * @returns {Object|null} { number, title, content } 或 null
+ */
+function get108PracticeKnowledge(theme) {
+  if (!theme.found || !PRACTICE_108_SHEET_ID) {
+    return null;
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(PRACTICE_108_SHEET_ID);
+    const sheet = ss.getSheetByName('108修煉');
+
+    if (!sheet) {
+      console.warn('找不到 108修煉 工作表');
+      return null;
+    }
+
+    const data = sheet.getDataRange().getValues();
+
+    // 跳過標題列，從第 2 列開始
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const rowNumber = String(row[0]).padStart(3, '0');
+      const rowTitle = String(row[1]);
+      const rowContent = String(row[2]);
+
+      // 優先用編號匹配
+      if (theme.number && rowNumber === theme.number) {
+        return { number: rowNumber, title: rowTitle, content: rowContent };
+      }
+
+      // 其次用名稱匹配（標題包含名稱，或名稱包含標題）
+      if (!theme.number && theme.name) {
+        if (rowTitle.includes(theme.name) || theme.name.includes(rowTitle.replace('修', ''))) {
+          return { number: rowNumber, title: rowTitle, content: rowContent };
+        }
+      }
+    }
+
+    console.log('未找到匹配的修煉項目：' + JSON.stringify(theme));
+    return null;
+  } catch (e) {
+    console.error('查詢 108 修煉知識庫失敗：' + e.message);
+    return null;
+  }
+}
+
+// ===== AI 回饋模組 =====
+
+/**
+ * 心得類型常數
+ */
+const ReportType = {
+  GUAN_ZHAO: 'guan_zhao',      // 觀照覺明修煉營
+  PRACTICE_108: 'practice_108', // 108 項修煉（修煉航海週記）
+  DEFAULT: 'default'            // 預設
+};
+
+/**
+ * 偵測心得類型
+ */
+function detectReportType(report) {
   if (isGuanZhaoReport(report)) {
-    const knowledge = getKnowledgeBase();
+    return ReportType.GUAN_ZHAO;
+  }
+  if (is108PracticeReport(report)) {
+    return ReportType.PRACTICE_108;
+  }
+  return ReportType.DEFAULT;
+}
 
-    if (knowledge) {
-      prompt = `你是「觀照覺明修煉營」的指導老師。這是進階修煉課程，學員已具備基礎，請根據課程教學內容，針對學員的叩問提供精準回饋。
+/**
+ * 共用的格式要求
+ */
+function getFormatRequirements() {
+  return `格式要求：
+- 不要包含任何問候或稱呼（例如「你好」、「夥伴您好」、或直接叫出姓名）
+- 稱呼對方時，使用「您」
+- 不要寒暄或開場白，第一句直接進入回饋重點
+- 不要重述題目或原文
+- 不要使用任何 Markdown 符號
+- 300 字以內`;
+}
+
+/**
+ * 主要入口：產生 AI 回饋
+ */
+function generateAIFeedback(report, question) {
+  const reportType = detectReportType(report);
+  console.log('心得類型：' + reportType);
+
+  const prompt = getPromptByType(reportType, report, question);
+
+  return callAI(prompt);
+}
+
+/**
+ * 根據心得類型取得對應的 prompt
+ */
+function getPromptByType(reportType, report, question) {
+  switch (reportType) {
+    case ReportType.GUAN_ZHAO:
+      return getGuanZhaoPrompt(report, question);
+    case ReportType.PRACTICE_108:
+      return get108PracticePrompt(report, question);
+    default:
+      return getDefaultPrompt(report, question);
+  }
+}
+
+/**
+ * 呼叫 AI API
+ */
+function callAI(prompt) {
+  if (GEMINI_API_KEY) {
+    return callGeminiAPI(prompt);
+  }
+  // OpenAI 暫時停用，等充值後再啟用
+  // if (OPENAI_API_KEY) {
+  //   return callOpenAIAPI(prompt);
+  // }
+  throw new Error('AI API Key 未設定');
+}
+
+// ===== 各類型 Prompt 產生器 =====
+
+/**
+ * 觀照覺明修煉營 prompt
+ */
+function getGuanZhaoPrompt(report, question) {
+  const knowledge = getKnowledgeBase();
+
+  if (!knowledge) {
+    console.warn('觀照覺明知識庫未設定或讀取失敗，使用預設回覆方式');
+    return getDefaultPrompt(report, question);
+  }
+
+  return `你是「觀照覺明修煉營」的指導老師。這是進階修煉課程，學員已具備基礎，請根據課程教學內容，針對學員的叩問提供精準回饋。
 
 <課程教學內容>
 ${knowledge}
@@ -784,37 +957,55 @@ ${question}
 2. 依據教學：回應須扣緊課程內容，引導學員回到正確的修煉方向
 3. 點出盲點：若從心得中觀察到學員的盲點或偏差，直接指出
 
-格式要求：
-- 不要包含任何問候或稱呼（例如「你好」、「夥伴您好」、或直接叫出姓名）
-- 稱呼對方時，使用「您」
-- 不要寒暄或開場白，第一句直接進入回饋重點
-- 不要重述題目或原文
-- 不要使用任何 Markdown 符號
-- 300 字以內`;
-    } else {
-      console.warn('知識庫未設定或讀取失敗，使用預設回覆方式');
-      prompt = getDefaultPrompt(report, question);
-    }
-  } else {
-    prompt = getDefaultPrompt(report, question);
-  }
-
-  try {
-    if (GEMINI_API_KEY) {
-      return callGeminiAPI(prompt);
-    }
-    // OpenAI 暫時停用，等充值後再啟用
-    // else if (OPENAI_API_KEY) {
-    //   return callOpenAIAPI(prompt);
-    // }
-    else {
-      throw new Error('AI API Key 未設定');
-    }
-  } catch (e) {
-    throw e;
-  }
+${getFormatRequirements()}`;
 }
 
+/**
+ * 108 項修煉 prompt
+ */
+function get108PracticePrompt(report, question) {
+  const theme = extractPracticeTheme(report);
+  console.log('提取的修煉主題：' + JSON.stringify(theme));
+
+  const knowledge = theme.found ? get108PracticeKnowledge(theme) : null;
+
+  if (!knowledge) {
+    console.warn('未找到對應的 108 修煉內容，使用預設 prompt');
+    return getDefaultPrompt(report, question);
+  }
+
+  console.log('找到修煉內容：【' + knowledge.number + '】' + knowledge.title);
+
+  return `你是「108項修煉」的指導老師。請根據該修煉項目的教學內容，針對學員的叩問提供精準回饋。
+
+<修煉項目>
+【${knowledge.number}】${knowledge.title}
+</修煉項目>
+
+<修煉教學內容>
+${knowledge.content}
+</修煉教學內容>
+
+<學員修煉心得>
+${report}
+</學員修煉心得>
+
+<學員叩問>
+${question}
+</學員叩問>
+
+回饋原則：
+1. 精準回應：直指叩問核心，結合該修煉項目的理法來回應
+2. 依據教學：回應須扣緊該修煉項目的核心理法與修煉方法
+3. 具體建議：根據學員的心得內容，給予具體可行的修煉建議
+4. 點出盲點：若從心得中觀察到學員的盲點或偏差，直接指出
+
+${getFormatRequirements()}`;
+}
+
+/**
+ * 預設 prompt
+ */
 function getDefaultPrompt(report, question) {
   return `請以溫暖、務實、尊重的口吻，針對以下修煉心得中的叩問提供回饋。
 
@@ -831,11 +1022,5 @@ ${question}
 2. 結合心得內容的觀察與建議
 3. 溫暖的鼓勵與支持
 
-格式要求：
-- 回覆內容不要包含任何問候或稱呼（例如「你好」、「夥伴您好」、或直接叫出姓名）
-- 稱呼對方時，使用「您」
-- 不要寒暄或開場白，第一句直接進入回饋重點
-- 不要重述題目或原文
-- 不要使用任何 Markdown 符號
-- 300 字以內`;
+${getFormatRequirements()}`;
 }

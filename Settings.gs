@@ -19,3 +19,6 @@ var OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI
 
 // 觀照覺明修煉營知識庫 Google Docs ID
 var KNOWLEDGE_DOC_ID = PropertiesService.getScriptProperties().getProperty('KNOWLEDGE_DOC_ID') || '';
+
+// 108 項修煉知識庫 Google Sheets ID
+var PRACTICE_108_SHEET_ID = PropertiesService.getScriptProperties().getProperty('PRACTICE_108_SHEET_ID') || '';
