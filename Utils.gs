@@ -21,11 +21,13 @@ function extractDeepQuestion(text) {
   let raw = match[1] == null ? '' : String(match[1]);
   let content = raw.trim();
 
-  // 若第一行是括號備註（例如「(與修煉相關即可)」），忽略該行
+  // 移除括號備註（例如「(與修煉相關即可)」），可能獨立成行或與內容同行
   if (content) {
     let lines = content.split('\n').map(x => x.trim()).filter(x => x);
-    if (lines.length > 0 && /^\([^\)]*\)$/.test(lines[0])) {
-      lines.shift();
+    if (lines.length > 0) {
+      // 移除第一行開頭的括號備註（無論後面是否還有其他文字）
+      lines[0] = lines[0].replace(/^\([^\)]*\)\s*/, '').trim();
+      if (!lines[0]) lines.shift();
     }
     content = lines.join('\n').trim();
   }
