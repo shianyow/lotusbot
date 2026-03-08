@@ -4,7 +4,7 @@ function listGeminiModels() {
     return;
   }
   
-  const url = 'https://generativelanguage.googleapis.com/v1/models?key=' + GEMINI_API_KEY;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + GEMINI_API_KEY;
   
   try {
     const response = UrlFetchApp.fetch(url);
