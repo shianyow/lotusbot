@@ -1,3 +1,9 @@
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('工具箱')
+    .addItem('匯出修煉報告', 'showExportReportDialog')
+    .addToUi();
+}
 
 function doGet(e)
 {

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 12px;
+      margin: 0;
+    }
+    .form-group {
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      margin-bottom: 3px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    input[type="text"],
+    input[type="date"] {
+      width: 100%;
+      padding: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    .hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .btn-primary {
+      background-color: #4285f4;
+      color: white;
+    }
+    .btn-secondary {
+      background-color: #f1f1f1;
+      color: #333;
+    }
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      display: none;
+      font-size: 14px;
+    }
+    .status.info {
+      background-color: #e3f2fd;
+      color: #1565c0;
+    }
+    .status.success {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status.error {
+      background-color: #ffebee;
+      color: #c62828;
+    }
+    .btn-group {
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-group">
+    <label for="startDate">開始日期 *</label>
+    <input type="date" id="startDate">
+  </div>
+
+  <div class="form-group">
+    <label for="endDate">結束日期 *</label>
+    <input type="date" id="endDate">
+  </div>
+
+  <div class="form-group">
+    <label for="name">姓名</label>
+    <input type="text" id="name" placeholder="選填，支援部分匹配">
+  </div>
+
+  <div class="form-group">
+    <label for="topic">修煉主題</label>
+    <input type="text" id="topic" placeholder="選填，搜尋內容中的主題關鍵字">
+    <div class="hint">例如：不著相、觀果知因、火侯</div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-primary" id="exportBtn" onclick="exportReport()">匯出</button>
+    <button class="btn btn-secondary" onclick="google.script.host.close()">取消</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <script>
+    function showStatus(message, type) {
+      var status = document.getElementById('status');
+      status.textContent = message;
+      status.className = 'status ' + type;
+      status.style.display = 'block';
+    }
+
+    function exportReport() {
+      var startDate = document.getElementById('startDate').value;
+      var endDate = document.getElementById('endDate').value;
+      var name = document.getElementById('name').value.trim();
+      var topic = document.getElementById('topic').value.trim();
+
+      if (!startDate || !endDate) {
+        showStatus('請選擇開始和結束日期', 'error');
+        return;
+      }
+      if (new Date(startDate) > new Date(endDate)) {
+        showStatus('開始日期不能晚於結束日期', 'error');
+        return;
+      }
+
+      document.getElementById('exportBtn').disabled = true;
+      showStatus('正在查詢並匯出中，請稍候...', 'info');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          document.getElementById('exportBtn').disabled = false;
+          if (result.success) {
+            var byteChars = atob(result.data);
+            var byteNumbers = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) {
+              byteNumbers[i] = byteChars.charCodeAt(i);
+            }
+            var byteArray = new Uint8Array(byteNumbers);
+            var blob = new Blob([byteArray], { type: 'text/plain;charset=utf-8' });
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = result.fileName;
+            link.click();
+            showStatus('匯出成功！共 ' + result.count + ' 篇，已下載 ' + result.fileName, 'success');
+          } else {
+            showStatus('匯出失敗：' + result.message, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          document.getElementById('exportBtn').disabled = false;
+          showStatus('發生錯誤：' + error.message, 'error');
+        })
+        .exportReport(startDate, endDate, name, topic);
+    }
+  </script>
+</body>
+</html>
