@@ -3,6 +3,42 @@ function init()
   let lineApp = new LineApp(CHANNEL_ACCESS_TOKEN);
   lineApp.aggressive = true;
 
+  // 收集 AI 回饋評分（Flex 1~5 按鈕的 postback）
+  lineApp.on('postback', (event) => {
+    try {
+      let data = parsePostbackData(event.postback && event.postback.data);
+      if (data.action === 'rate' && data.fid) {
+        let raterUserId = (event.source && event.source.userId) || '';
+        let rater = raterUserId ? User.getData(raterUserId) : null;
+        let raterName = (rater && rater.displayName) ? rater.displayName : '';
+
+        // 開放所有人評分；記下是否為作者本人（data.auth 為作者 UserId），分析時可只取作者
+        let isAuthor = (!data.auth) || (!!raterUserId && raterUserId === data.auth);
+        let r = recordRating(data.fid, raterUserId, raterName, Number(data.score), isAuthor);
+
+        // 只對「作者本人」回覆確認；旁人評分則靜默，避免群組噪音
+        if (isAuthor) {
+          let name = raterName;
+          if (!name) {
+            // 快取沒有名字 → 向 LINE 即時查詢（getInfo 會順便寫入快取）
+            try {
+              let info = lineApp.getInfo(event);
+              name = (info && info.user && info.user.displayName) || '';
+            } catch (e2) {
+              log('取得評分者名稱失敗: ' + e2.message);
+            }
+          }
+          // 有名字才用「【名字】」點名；沒名字就用自然的「您」（不加框）
+          let who = name ? ('【' + name + '】') : '您';
+          lineApp._replayMessages.push(LineApp.LineText(
+            (r === 'updated' ? '已更新' : '感謝') + who + '的評分 🙏'));
+        }
+      }
+    } catch (e) {
+      log('postback 處理錯誤: ' + e.message);
+    }
+  });
+
   lineApp.addRule(
     "你好",
     () => {
@@ -100,8 +136,15 @@ function init()
         try {
           let aiFeedback = generateAIFeedback(event.word, deepQuestion.content);
 
-          // 只回傳 AI 回饋文字（不貼圖、不加固定開場）
-          return [LineApp.LineText(`${reportUserName}夥伴您好，\n\n${aiFeedback}`)];
+          // 記錄這筆回饋（含使用的模型），並產生唯一識別碼供評分對應
+          let feedbackId = Utilities.getUuid();
+          let theme = logAIFeedback(feedbackId, event, reportUserName, LAST_AI_MODEL, aiFeedback);
+
+          // 回傳「純文字回饋（好讀、可放大）＋ 評分小卡（標示姓名＋主題以辨識）」
+          return [
+            LineApp.LineText(`${reportUserName}夥伴您好，\n\n${aiFeedback}`),
+            flexRatingCard(feedbackId, reportUserName, theme, event.source.userId),
+          ];
         } catch (e) {
           log('AI 回饋錯誤: ' + e.message);
           // AI 回饋失敗時：不在群組回覆，避免噪音；僅後台記錄即可

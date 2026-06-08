@@ -624,8 +624,8 @@ function callGeminiAPI(prompt) {
   };
 
   const models = [
-    'gemini-3-flash-preview',
-    'gemini-3.1-flash-lite-preview',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
   ];
 
   let lastErr = null;
@@ -655,6 +655,7 @@ function callGeminiAPI(prompt) {
 
       if (result.candidates && result.candidates[0] && result.candidates[0].content) {
         log('Gemini model used: ' + JSON.stringify({model:model, attemptedModels:attemptedModels}));
+        LAST_AI_MODEL = model;  // 記錄實際回應的模型，供評分記錄使用
         return result.candidates[0].content.parts[0].text;
       }
 
